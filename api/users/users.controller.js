@@ -1,11 +1,15 @@
 const Joi = require("joi");
-const DbController = require("../utils/DbController");
+// const DbController = require("../utils/DbController");
 const shortid = require("shortid");
+const {
+  Types: { ObjectId },
+} = require("mongoose");
+const contactModel = require("./users.module");
 
 class userController {
   async getUsers(req, res, next) {
     try {
-      const contacts = await DbController.listContacts();
+      const contacts = await contactModel.find();
       return res.json(contacts);
     } catch (e) {
       res.status(500).json({ message: e.message });
@@ -14,10 +18,13 @@ class userController {
 
   async getUsersById(req, res, next) {
     try {
-      const contact = await DbController.getContactById(req.params.contactId);
+      const contactId = req.params.contactId;
+
+      const contact = await contactModel.findById(contactId);
       if (!contact) {
-        throw new Error("Not Found");
+        return res.status(404).json("Not Found contact with such id");
       }
+
       return res.json(contact);
     } catch (e) {
       res.status(500).json({ message: e.message });
@@ -26,41 +33,48 @@ class userController {
 
   async createUsers(req, res, next) {
     try {
-      const newUser = { id: shortid.generate(), ...req.body };
-      await DbController.addContact(newUser);
-      return res.status(201).send(newUser);
-    } catch (e) {
-      res.status(500).json({ message: e.message });
+      const newContact = await contactModel.create(req.body);
+      return res.status(201).send(newContact);
+    } catch (err) {
+      next(err);
     }
   }
 
   async updateUser(req, res, next) {
     try {
-      const updatedContact = await DbController.updateContact(
-        req.params.contactId,
+      const contactId = req.params.contactId;
+      const updatedContact = await contactModel.findContactByIdAndUpdate(
+        contactId,
         req.body
       );
+      console.log(updatedContact);
       if (!updatedContact) {
-        throw new Error("Not Found");
+        return res.status(404).json("Not Found contact with such id");
       }
-      return res.status(200).json(updatedContact);
-    } catch (e) {
-      res.status(400).json({ message: e.message });
+      return res.status(204).send();
+    } catch (err) {
+      next(err);
     }
   }
 
   async removeUser(req, res, next) {
     try {
-      const removedContact = await DbController.removeContact(
-        req.params.contactId
-      );
-      if (!removedContact) {
-        throw new Error("Not Found");
+      const contactId = req.params.contactId;
+      const deletedContact = await contactModel.findByIdAndDelete(contactId);
+      if (!deletedContact) {
+        return res.status(404).json("Not Found contact with such id");
       }
-      return res.status(200).json({ message: "contact deleted" });
+      return res.status(204).json({ message: "contact deleted" });
     } catch (e) {
       res.status(400).json({ message: e.message });
     }
+  }
+  validateContactId(req, res, next) {
+    const contactId = req.params.contactId;
+    if (!ObjectId.isValid(contactId)) {
+      return res.status(400).json("Invalid Id");
+    }
+    next();
   }
 
   async validateCreateUser(req, res, next) {
@@ -68,7 +82,10 @@ class userController {
       const createUserRules = Joi.object({
         name: Joi.string().required(),
         email: Joi.string().required(),
-        phone: Joi.number().required(),
+        phone: Joi.string().required(),
+        subscription: Joi.string().required(),
+        password: Joi.string().required(),
+        token: Joi.string(),
       });
 
       const result = await Joi.validate(req.body, createUserRules);
@@ -88,7 +105,10 @@ class userController {
       const updateUserRules = Joi.object({
         name: Joi.string(),
         email: Joi.string(),
-        phone: Joi.number(),
+        phone: Joi.string(),
+        subscription: Joi.string(),
+        password: Joi.string(),
+        token: Joi.string(),
       });
 
       const result = await Joi.validate(req.body, updateUserRules);

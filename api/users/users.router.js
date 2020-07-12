@@ -1,20 +1,29 @@
-const express = require("express");
+const { Router } = require("express");
 const UserController = require("./users.controller");
 
-const userRouter = express.Router();
+const userRouter = Router();
 
-userRouter.get("/api/contacts", UserController.getUsers);
-userRouter.get("/api/contacts/:contactId", UserController.getUsersById);
+userRouter.get("/", UserController.getUsers);
+userRouter.get(
+  "/:contactId",
+  UserController.validateContactId,
+  UserController.getUsersById
+);
 userRouter.post(
-  "/api/contacts",
+  "/",
   UserController.validateCreateUser,
   UserController.createUsers
 );
 userRouter.patch(
-  "/api/contacts/:contactId",
+  "/:contactId",
+  UserController.validateContactId,
   UserController.validateUpdateUser,
   UserController.updateUser
 );
-userRouter.delete("/api/contacts/:contactId", UserController.removeUser);
+userRouter.delete(
+  "/:contactId",
+  UserController.validateContactId,
+  UserController.removeUser
+);
 
 module.exports = userRouter;
