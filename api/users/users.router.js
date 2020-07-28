@@ -1,29 +1,37 @@
 const { Router } = require("express");
-const UserController = require("./users.controller");
+const userController = require("./users.controller");
 
 const userRouter = Router();
 
-userRouter.get("/", UserController.getUsers);
-userRouter.get(
-  "/:contactId",
-  UserController.validateContactId,
-  UserController.getUsersById
-);
 userRouter.post(
-  "/",
-  UserController.validateCreateUser,
-  UserController.createUsers
+  "/auth/register",
+  userController.validateRegistrateUser,
+  userController.registrateUser
 );
+
+userRouter.post(
+  "/auth/login",
+  userController.validateSignIn,
+  userController.signIn
+);
+
 userRouter.patch(
-  "/:contactId",
-  UserController.validateContactId,
-  UserController.validateUpdateUser,
-  UserController.updateUser
+  "/auth/logout",
+  userController.authorize,
+  userController.logout
 );
-userRouter.delete(
-  "/:contactId",
-  UserController.validateContactId,
-  UserController.removeUser
+
+userRouter.get(
+  "/users/current",
+  userController.authorize,
+  userController.getUser
+);
+
+userRouter.patch(
+  "/users",
+  userController.authorize,
+  userController.validateUpdateUser,
+  userController.updateUser
 );
 
 module.exports = userRouter;
