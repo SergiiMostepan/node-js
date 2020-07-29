@@ -1,40 +1,86 @@
 const Joi = require("joi");
-// const DbController = require("../utils/DbController");
-const shortid = require("shortid");
 const {
   Types: { ObjectId },
 } = require("mongoose");
-const contactModel = require("./users.module");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const userModel = require("./users.module");
+require("dotenv").config();
 
 class userController {
-  async getUsers(req, res, next) {
+  constructor() {
+    this._costfactor = 4;
+  }
+
+  get registrateUser() {
+    return this._registrateUser.bind(this);
+  }
+
+  get getUser() {
+    return this._getUser.bind(this);
+  }
+
+  async _getUser(req, res, next) {
     try {
-      const contacts = await contactModel.find();
-      return res.json(contacts);
+      const user = req.user;
+      return res.json({ email: user.email, subscription: user.subscription });
     } catch (e) {
       res.status(500).json({ message: e.message });
     }
   }
 
-  async getUsersById(req, res, next) {
+  async _registrateUser(req, res, next) {
     try {
-      const contactId = req.params.contactId;
+      const { email, password, subscription, token } = req.body;
 
-      const contact = await contactModel.findById(contactId);
-      if (!contact) {
-        return res.status(404).json("Not Found contact with such id");
+      const existingUser = await userModel.findUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).send("Email in use");
       }
 
-      return res.json(contact);
-    } catch (e) {
-      res.status(500).json({ message: e.message });
+      const passwordHash = await bcrypt.hash(password, this._costfactor);
+      const newUser = await userModel.create({
+        email,
+        password: passwordHash,
+        subscription,
+        token,
+      });
+      return res.status(201).send({
+        email: newUser.email,
+        subscription: newUser.subscription,
+      });
+    } catch (err) {
+      next(err);
     }
   }
 
-  async createUsers(req, res, next) {
+  async signIn(req, res, next) {
     try {
-      const newContact = await contactModel.create(req.body);
-      return res.status(201).send(newContact);
+      const { email, password } = req.body;
+      const user = await userModel.findUserByEmail(email);
+
+      if (!user) {
+        return res.status(401).send("Email or password is wrong");
+      }
+
+      const isPasswordWalid = await bcrypt.compare(password, user.password);
+      if (!isPasswordWalid) {
+        return res.status(401).send("Email or password is wrong");
+      }
+
+      const token = await jwt.sign({ id: user._id }, process.env.SECRETKEY);
+      await userModel.updateToken(user._id, token);
+      return res.status(200).json({ token });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async logout(req, res, next) {
+    try {
+      const user = req.user;
+      await userModel.updateToken(user._id, null);
+      return res.status(204).send();
     } catch (err) {
       next(err);
     }
@@ -42,80 +88,98 @@ class userController {
 
   async updateUser(req, res, next) {
     try {
-      const contactId = req.params.contactId;
-      const updatedContact = await contactModel.findContactByIdAndUpdate(
-        contactId,
-        req.body
-      );
-      console.log(updatedContact);
-      if (!updatedContact) {
-        return res.status(404).json("Not Found contact with such id");
+      const user = req.user;
+
+      const updatedUser = await userModel.findUserByIdAndUpdate(user._id, {
+        subscription: req.body.subscription,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json("Not Found contact");
       }
+
       return res.status(204).send();
     } catch (err) {
       next(err);
     }
   }
 
-  async removeUser(req, res, next) {
+  async authorize(req, res, next) {
     try {
-      const contactId = req.params.contactId;
-      const deletedContact = await contactModel.findByIdAndDelete(contactId);
-      if (!deletedContact) {
-        return res.status(404).json("Not Found contact with such id");
+      // 1. витягнути токен користувача з заголовка Authorization
+      const authorizationHeader = req.get("Authorization");
+      const token = authorizationHeader.replace("Bearer ", "");
+
+      // 2. витягнути id користувача з пейлоада або вернути користувачу
+      // помилку зі статус кодом 401
+      let userId;
+      try {
+        userId = await jwt.verify(token, process.env.SECRETKEY).id;
+        console.log("UserId", userId);
+      } catch (err) {
+        res.status(401).send("Not authorized");
       }
-      return res.status(204).json({ message: "contact deleted" });
-    } catch (e) {
-      res.status(400).json({ message: e.message });
+
+      // 3. витягнути відповідного користувача. Якщо такого немає - викинути
+      // помилку зі статус кодом 401
+      // userModel - модель користувача в нашій системі
+      const user = await userModel.findById(userId);
+      if (!user || user.token !== token) {
+        res.status(401).send("Not authorized");
+      }
+
+      // 4. Якщо все пройшло успішно - передати запис користувача і токен в req
+      // і передати обробку запиту на наступний middleware
+      req.user = user;
+      req.token = token;
+
+      next();
+    } catch (err) {
+      next(err);
     }
-  }
-  validateContactId(req, res, next) {
-    const contactId = req.params.contactId;
-    if (!ObjectId.isValid(contactId)) {
-      return res.status(400).json("Invalid Id");
-    }
-    next();
   }
 
-  async validateCreateUser(req, res, next) {
+  async validateRegistrateUser(req, res, next) {
     try {
       const createUserRules = Joi.object({
-        name: Joi.string().required(),
         email: Joi.string().required(),
-        phone: Joi.string().required(),
-        subscription: Joi.string().required(),
         password: Joi.string().required(),
-        token: Joi.string(),
       });
 
       const result = await Joi.validate(req.body, createUserRules);
 
       next();
     } catch (e) {
-      res.status(400).json({ message: "missing required name field" });
+      res.status(400).json({ message: "missing required field" });
+    }
+  }
+
+  async validateSignIn(req, res, next) {
+    try {
+      const signInRules = Joi.object({
+        email: Joi.string().required(),
+        password: Joi.string().required(),
+      });
+
+      const result = await Joi.validate(req.body, signInRules);
+
+      next();
+    } catch (e) {
+      res.status(400).json({ message: "missing required field" });
     }
   }
 
   async validateUpdateUser(req, res, next) {
     try {
-      if (!Object.keys(req.body).length) {
-        throw new Error("missing fields");
-      }
-
       const updateUserRules = Joi.object({
-        name: Joi.string(),
-        email: Joi.string(),
-        phone: Joi.string(),
-        subscription: Joi.string(),
-        password: Joi.string(),
-        token: Joi.string(),
+        subscription: Joi.string().only("free", "pro", "premium").required(),
       });
 
       const result = await Joi.validate(req.body, updateUserRules);
 
       next();
     } catch (e) {
-      res.status(400).json({ message: e.message });
+      res.status(400).json({ message: "Value must be on of free/pro/premium" });
     }
   }
 }
