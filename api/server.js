@@ -4,9 +4,6 @@ const cors = require("cors");
 const usersRouter = require("./users/users.router");
 require("dotenv").config();
 
-const MONGODB_URL =
-  "mongodb+srv://sergii:1005012bk@cluster0.clbfk.mongodb.net/db-contacts?retryWrites=true&w=majority";
-
 module.exports = class UsersServer {
   constructor() {
     this.server = null;
