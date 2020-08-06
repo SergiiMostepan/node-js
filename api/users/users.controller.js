@@ -4,6 +4,13 @@ const {
 } = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+// const multer = require("multer");
+const path = require("path");
+const { promises: fsPromises } = require("fs");
+const imagemin = require("imagemin");
+const imageminJpegtran = require("imagemin-jpegtran");
+const imageminPngquant = require("imagemin-pngquant");
+const Avatar = require("avatar-builder");
 const userModel = require("./users.module");
 require("dotenv").config();
 
@@ -23,7 +30,11 @@ class userController {
   async _getUser(req, res, next) {
     try {
       const user = req.user;
-      return res.json({ email: user.email, subscription: user.subscription });
+      return res.json({
+        email: user.email,
+        subscription: user.subscription,
+        avatarURL: user.avatarURL,
+      });
     } catch (e) {
       res.status(500).json({ message: e.message });
     }
@@ -31,6 +42,12 @@ class userController {
 
   async _registrateUser(req, res, next) {
     try {
+      const avatar = await Avatar.catBuilder(128);
+      const buff = await avatar.create();
+      const fileName = Date.now() + ".png";
+      const fileLink = `public/images/${fileName}`;
+      await fsPromises.writeFile(fileLink, buff);
+
       const { email, password, subscription, token } = req.body;
 
       const existingUser = await userModel.findUserByEmail(email);
@@ -42,11 +59,13 @@ class userController {
       const newUser = await userModel.create({
         email,
         password: passwordHash,
+        avatarURL: `public/images/${fileName}`,
         subscription,
         token,
       });
       return res.status(201).send({
         email: newUser.email,
+        avatarURL: newUser.avatarURL,
         subscription: newUser.subscription,
       });
     } catch (err) {
@@ -104,6 +123,27 @@ class userController {
     }
   }
 
+  async updateUserAvatar(req, res, next) {
+    try {
+      const user = req.user;
+
+      const oldAvatar = await userModel.findById(user._id);
+      await fsPromises.unlink(oldAvatar.avatarURL);
+
+      const updatedUser = await userModel.findUserByIdAndUpdate(user._id, {
+        avatarURL: req.file.path,
+      });
+
+      if (!updatedUser) {
+        return res.status(404).json("Not Found contact");
+      }
+
+      return res.status(200).json({ avatarURL: updatedUser.avatarURL });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async authorize(req, res, next) {
     try {
       // 1. витягнути токен користувача з заголовка Authorization
@@ -132,7 +172,6 @@ class userController {
       // і передати обробку запиту на наступний middleware
       req.user = user;
       req.token = token;
-
       next();
     } catch (err) {
       next(err);
@@ -180,6 +219,35 @@ class userController {
       next();
     } catch (e) {
       res.status(400).json({ message: "Value must be on of free/pro/premium" });
+    }
+  }
+
+  // async avatarUpploadMidlvare(req, res, next) {
+  //   const upload = multer({ dest: "tmp" });
+  //   await upload.single("file_example");
+  //   next();
+  // }
+  async minifyImage(req, res, next) {
+    try {
+      await imagemin([req.file.path], {
+        destination: "public/images",
+        plugins: [
+          imageminJpegtran(),
+          imageminPngquant({
+            quality: [0.6, 0.8],
+          }),
+        ],
+      });
+
+      await fsPromises.unlink(req.file.path);
+
+      req.file.path = path.join("public/images", req.file.filename);
+      req.file.destination = "public/images";
+      next();
+    } catch (err) {
+      res
+        .status(400)
+        .json({ message: "Value must be file_example with added photo" });
     }
   }
 }
