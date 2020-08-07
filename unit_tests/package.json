@@ -1,0 +1,19 @@
+{
+  "name": "unit_tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "authorize.test.js",
+  "scripts": {
+    "test": "mocha authorize.test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "mocha": "^8.1.1",
+    "sinon": "^9.0.2"
+  },
+  "dependencies": {
+    "should": "^13.2.3"
+  }
+}

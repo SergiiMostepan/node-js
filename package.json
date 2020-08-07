@@ -23,7 +23,10 @@
     "shortid": "^2.2.15",
     "yargs": "^15.3.1"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "mocha": "^8.1.1",
+    "sinon": "^9.0.2"
+  },
   "scripts": {
     "start": "node api/start.js",
     "dev": "nodemon api/start.js",
