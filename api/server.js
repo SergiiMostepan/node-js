@@ -49,7 +49,7 @@ module.exports = class UsersServer {
   }
 
   startListening() {
-    this.server.listen(process.env.PORT, () => {
+    this.server.listen(process.env.PORT || 80, () => {
       console.log("Server started listening on port", process.env.PORT);
     });
   }
