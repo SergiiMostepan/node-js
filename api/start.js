@@ -1,3 +1,3 @@
-const UsersServer = require("./server");
+// const UsersServer = require("./server");
 
-new UsersServer().start();
+// new UsersServer().start();
