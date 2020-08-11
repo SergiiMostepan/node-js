@@ -56,4 +56,6 @@ userRouter.patch(
   userController.updateUserAvatar
 );
 
+userRouter.get("/verify/:token", userController.verifyToken);
+
 module.exports = userRouter;

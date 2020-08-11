@@ -11,6 +11,9 @@ const imagemin = require("imagemin");
 const imageminJpegtran = require("imagemin-jpegtran");
 const imageminPngquant = require("imagemin-pngquant");
 const Avatar = require("avatar-builder");
+const { nanoid } = require("nanoid");
+const sgMail = require("@sendgrid/mail");
+const Mailgen = require("mailgen");
 const userModel = require("./users.module");
 require("dotenv").config();
 
@@ -25,6 +28,10 @@ class userController {
 
   get getUser() {
     return this._getUser.bind(this);
+  }
+
+  get sendEmail() {
+    return this._sendEmail.bind(this);
   }
 
   async _getUser(req, res, next) {
@@ -56,13 +63,20 @@ class userController {
       }
 
       const passwordHash = await bcrypt.hash(password, this._costfactor);
+      const verifyToken = nanoid();
+      const options = {
+        verifyToken,
+        email,
+      };
+      await this.sendEmail(options);
       const newUser = await userModel.create({
         email,
         password: passwordHash,
         avatarURL: `public/images/${fileName}`,
         subscription,
-        token,
+        verifyToken,
       });
+
       return res.status(201).send({
         email: newUser.email,
         avatarURL: newUser.avatarURL,
@@ -249,6 +263,63 @@ class userController {
         .status(400)
         .json({ message: "Value must be file_example with added photo" });
     }
+  }
+  async _sendEmail({ verifyToken, email }) {
+    const mailGenerator = new Mailgen({
+      theme: "default",
+      product: {
+        name: "GOiT",
+        link: "http://localhost:3000/",
+      },
+    });
+    const template = {
+      body: {
+        intro: "Welcome to my HW! We're very excited to have you on board.",
+        action: {
+          instructions: "To get started with uss, please click here:",
+          button: {
+            color: "#22BC66", // Optional action button color
+            text: "Verify your account",
+            link: `http://localhost:3000/verify/${verifyToken}`,
+          },
+        },
+      },
+    };
+    const emailBody = mailGenerator.generate(template);
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    const msg = {
+      to: email,
+      from: "sergiimostepan@gmail.com", // Use the email address or domain you verified above
+      subject: "Sending with Twilio SendGrid is Fun",
+      text: "verify account",
+      html: emailBody,
+      // html: "<strong>and easy to do anywhere, even with Node.js</strong>",
+    };
+    //ES6
+
+    await sgMail.send(msg).then(
+      () => {},
+      (error) => {
+        console.error(error);
+
+        if (error.response) {
+          console.error(error.response.body);
+        }
+      }
+    );
+  }
+
+  async verifyToken(req, res, next) {
+    const { token } = req.params;
+    const user = await userModel.findOne({ verifyToken: token });
+    if (!user) {
+      return res.status(404).json({
+        message:
+          "Your verification token is not valid. Contact with administration",
+      });
+    }
+    await user.updateOne({ verify: true, verifyToken: null });
+    res.status(200).json({ message: "verification successful" });
   }
 }
 
