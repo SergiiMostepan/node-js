@@ -6,6 +6,8 @@ const userRouter = require("./users/users.router");
 const contactRouter = require("./contacts/contacts.router");
 require("dotenv").config();
 
+PORT = process.env.PORT || 80;
+
 module.exports = class UsersServer {
   constructor() {
     this.server = null;
@@ -49,7 +51,7 @@ module.exports = class UsersServer {
   }
 
   startListening() {
-    this.server.listen(process.env.PORT || 80, () => {
+    this.server.listen(PORT, () => {
       console.log("Server started listening on port", process.env.PORT);
     });
   }
